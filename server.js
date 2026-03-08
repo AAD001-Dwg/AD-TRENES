@@ -174,6 +174,35 @@ app.get("/api/trenes/actualizaciones", async (_req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── DIAGNÓSTICO: prueba todos los endpoints del gobierno ─────────────────────
+app.get("/api/diagnostico", async (_req, res) => {
+  const endpoints = [
+    "/trenes/tripUpdates",
+    "/trenes/vehiclePositions",
+    "/trenes/alerts",
+    "/trenes/arrivalDeparture",
+    "/colectivos/tripUpdates",
+    "/subtes/tripUpdates",
+  ];
+  const results = {};
+  for (const ep of endpoints) {
+    try {
+      const params = new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET });
+      const r = await fetch(`${GOV_API}${ep}?${params}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      const text = await r.text();
+      let preview = text.slice(0, 120);
+      results[ep] = { status: r.status, ok: r.ok, preview };
+    } catch (e) {
+      results[ep] = { status: "ERROR", ok: false, preview: e.message };
+    }
+  }
+  res.json(results);
+});
+
 // ── ARRANQUE ──────────────────────────────────────────────────────────────────
 app.listen(PORT, async () => {
   console.log(`\n🚆 Trenes AR Proxy · puerto ${PORT}`);
