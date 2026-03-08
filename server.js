@@ -5,6 +5,27 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const app = express();
+
+// ── Caché simple en memoria ───────────────────────────────────────────────────
+// Evita llamar a SOFSE más de una vez por estación cada 25 segundos
+const cache = new Map();
+const CACHE_TTL = 25000; // ms
+
+function cacheGet(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(key); return null; }
+  return entry.data;
+}
+function cacheSet(key, data) {
+  cache.set(key, { data, ts: Date.now() });
+  // Limpiar entradas viejas si el caché crece mucho
+  if (cache.size > 200) {
+    for (const [k, v] of cache) {
+      if (Date.now() - v.ts > CACHE_TTL) cache.delete(k);
+    }
+  }
+}
 const PORT = process.env.PORT || 3001;
 const SOFSE_API = "https://ariedro.dev/api-trenes";
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +35,25 @@ app.use(express.json());
 
 // ── Servir la app HTML ────────────────────────────────────────────────────────
 app.get("/", (_req, res) => res.sendFile(join(__dirname, "trenes-ar-final.html")));
+
+// ── Endpoint para testear notificaciones ──────────────────────────────────────
+// GET /api/test-notif?estacion=Hudson&min=10
+// Simula que un tren está a X minutos de la estación
+app.get("/api/test-notif", (_req, res) => {
+  const estacion = _req.query.estacion || "Hudson";
+  const min = parseInt(_req.query.min || "10");
+  const hora = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+  res.json({
+    ok: true,
+    mensaje: `Abrí esta URL en el celular mientras tenés la app abierta en otra pestaña`,
+    simulacion: { estacion, min, hora },
+    instrucciones: [
+      "1. La app debe tener notificaciones habilitadas",
+      "2. Tener al menos una alerta configurada para esta estación",
+      "3. El polling chequea cada 60s — para testear más rápido usá el modo debug"
+    ]
+  });
+});
 
 // ── Service Worker — necesario para notificaciones en Android ─────────────────
 app.get("/sw.js", (_req, res) => {
@@ -39,13 +79,22 @@ app.get("/icon.png", (_req, res) => {
 });
 
 // ── Helper ────────────────────────────────────────────────────────────────────
-async function sofseFetch(path) {
+async function sofseFetch(path, useCache = true) {
+  if (useCache) {
+    const cached = cacheGet(path);
+    if (cached) {
+      console.log(`  [caché] ${path.slice(0, 60)}`);
+      return cached;
+    }
+  }
   const res = await fetch(`${SOFSE_API}${path}`, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(12000),
   });
   if (!res.ok) throw new Error(`SOFSE API ${res.status} en ${path}`);
-  return res.json();
+  const data = await res.json();
+  if (useCache) cacheSet(path, data);
+  return data;
 }
 
 // Cache simple de IDs de estaciones para no buscarlos cada vez

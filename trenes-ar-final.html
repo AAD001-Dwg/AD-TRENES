@@ -767,22 +767,41 @@ async function checkSuscripciones(){
     }catch(e){console.warn("polling error",e.message);}
   }
 }
-function dispararNotificacion(linea,estacion,min,key){
+async function dispararNotificacion(linea,estacion,min,key){
   const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
   notifLog.unshift({lineaNombre:linea.nombre,estacion,min,hora,key});
   if(notifLog.length>50) notifLog.pop();
   localStorage.setItem("notifLog",JSON.stringify(notifLog));
   updateNotifBadge();
-  if(Notification.permission==="granted"){
-    const opts={body:`A ${min} minutos de ${estacion} · ${hora}`,
-      tag:key, requireInteraction:min<=10,
-      icon:'/icon.png', badge:'/icon.png',
-      vibrate:min<=10?[200,100,200]:[100],
-      data:{estacion,min,linea:linea.nombre}};
-    // Con SW funciona en Android aunque la app esté en segundo plano
-    if(swRegistration) swRegistration.showNotification(`🚆 Tren ${linea.nombre} llegando`,opts);
-    else new Notification(`🚆 Tren ${linea.nombre} llegando`,opts);
+
+  if(Notification.permission!=="granted") return;
+
+  const titulo=`🚆 Tren ${linea.nombre} llegando`;
+  const opts={
+    body:`A ${min} minutos de ${estacion} · ${hora}`,
+    tag:key,
+    requireInteraction:min<=10,
+    icon:'/icon.png',
+    badge:'/icon.png',
+    vibrate:min<=10?[200,100,200]:[100],
+    data:{estacion,min,linea:linea.nombre},
+  };
+
+  try {
+    // En Android Chrome SIEMPRE usar SW — new Notification() no muestra en la barra
+    if(swReady){
+      const reg = await swReady;
+      await reg.showNotification(titulo, opts);
+      console.log('Notificación enviada via SW ✅');
+    } else {
+      // Fallback para desktop/Safari
+      new Notification(titulo, opts);
+    }
+  } catch(e) {
+    console.warn('Error notificación:', e.message);
+    try { new Notification(titulo, opts); } catch {}
   }
+
   if(navigator.vibrate) navigator.vibrate(min<=10?[200,100,200]:[100]);
 }
 function updateNotifBadge(){
@@ -815,6 +834,35 @@ function saveSuscripcion(){
 }
 function deleteSus(i){suscripciones.splice(i,1);localStorage.setItem("suscripciones",JSON.stringify(suscripciones));renderTab();}
 function toggleSus(i,v){suscripciones[i].activa=v;localStorage.setItem("suscripciones",JSON.stringify(suscripciones));renderTab();}
+async function testNotificacion(min){
+  if(Notification.permission!=="granted"){
+    alert("Primero habilitá las notificaciones con el botón de arriba.");
+    return;
+  }
+  const estacion = estacionActiva || "Hudson";
+  const linea = lineaActiva;
+  const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+  const key = `test-${Date.now()}`;
+  // Disparar notificación de prueba directamente
+  const opts = {
+    body:`A ${min} minutos de ${estacion} · ${hora} (PRUEBA)`,
+    tag: key,
+    requireInteraction: min <= 10,
+    vibrate: min <= 10 ? [200,100,200] : [100],
+  };
+  try {
+    if(swReady){ const reg=await swReady; await reg.showNotification(`🚆 Tren ${linea.nombre} llegando`,opts); }
+    else new Notification(`🚆 Tren ${linea.nombre} llegando`,opts);
+  } catch(e) { new Notification(`🚆 Tren ${linea.nombre} llegando`,opts); }
+  if(navigator.vibrate) navigator.vibrate(min<=10?[200,100,200]:[100]);
+  // Guardar en log
+  notifLog.unshift({lineaNombre:linea.nombre,estacion,min,hora:`${hora} (PRUEBA)`,key});
+  localStorage.setItem("notifLog",JSON.stringify(notifLog));
+  updateNotifBadge();
+  showToast("🧪 Notificación de prueba enviada");
+  renderTab();
+}
+
 function clearLog(){notifLog=[];localStorage.setItem("notifLog",JSON.stringify(notifLog));updateNotifBadge();renderTab();}
 
 // ══ CONFIG MODAL ══════════════════════════════════════════════════════════════
