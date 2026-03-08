@@ -68,32 +68,43 @@ app.get("/api/trenes/llegadas", async (req, res) => {
       return res.json({ llegadas: [], estacion, error: "ID de estación no encontrado", claves: Object.keys(est) });
     }
     const data = await sofseFetch(`/arribos/estacion/${estId}?cantidad=${cantidad}`);
-    const arribos = Array.isArray(data) ? data : data?.arribos || [];
-
-    // Normalizar al formato que espera la app
+    // Estructura real de SOFSE: { timestamp, results: [{arribo, servicio}], total }
+    const results = data?.results || [];
     const now = new Date();
-    const llegadas = arribos.map((a, i) => {
-      // La API devuelve hora como "HH:MM:SS" o "HH:MM"
-      // Intentar todos los posibles nombres de campos de hora
-      const horaStr = a.horaSalida || a.horaLlegada || a.hora || a.time || a.departure || a.arrival || "";
-      const [hh=0, mm=0] = horaStr.toString().split(":").map(Number);
-      const horaTren = new Date(now);
-      horaTren.setHours(hh, mm, 0, 0);
-      if (horaTren < now) horaTren.setDate(horaTren.getDate() + 1);
-      const minutos = Math.round((horaTren - now) / 60000);
-      if (i === 0) console.log(`  Arribo[0] keys: ${Object.keys(a).join(',')}`);
+
+    const llegadas = results.map((r, i) => {
+      const arribo   = r.arribo   || {};
+      const servicio = r.servicio || {};
+
+      // Minutos: usar arribo.segundos directamente (ya calculado por SOFSE)
+      const minutos = typeof arribo.segundos === "number"
+        ? Math.round(arribo.segundos / 60)
+        : Math.round((new Date(arribo.llegada?.estimada || arribo.llegada?.programada || Date.now()) - now) / 60000);
+
+      // Hora de llegada formateada
+      const llegadaISO = arribo.llegada?.estimada || arribo.llegada?.programada || "";
+      const hora = llegadaISO
+        ? new Date(llegadaISO).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
+        : "--:--";
+
+      // Demora = diferencia entre estimada y programada
+      const demora = (arribo.llegada?.programada && arribo.llegada?.estimada)
+        ? Math.max(0, Math.round((new Date(arribo.llegada.estimada) - new Date(arribo.llegada.programada)) / 60000))
+        : 0;
+
       return {
-        id: a.id || a.idViaje || i,
-        tripId: a.idViaje || a.id || `V${i}`,
-        dest: a.estacionDestino?.nombre || a.nombreDestino || a.destino || a.hasta?.nombre || "Terminal",
-        minutos: Math.max(0, minutos),
-        hora: horaStr.toString().slice(0, 5),
-        demora: a.demora || a.delay || 0,
-        ramal: a.ramal?.nombre || a.nombreRamal || a.lineaNombre || "",
-        anden: a.anden || a.andén || a.plataforma || (i % 4) + 1,
-        cap: ["Alta", "Media", "Baja"][i % 3],
+        id:       servicio.id || servicio.numero || i,
+        tripId:   servicio.id || `S${servicio.numero || i}`,
+        dest:     servicio.hasta?.estacion?.nombre || servicio.ramal?.cabeceraFinal?.nombre || "Terminal",
+        minutos:  Math.max(0, minutos),
+        hora,
+        demora,
+        ramal:    servicio.ramal?.nombre || servicio.gerencia?.nombre || "",
+        anden:    arribo.anden?.nombre ? `${arribo.anden.nombre}` : `${(i % 4) + 1}`,
+        cap:      ["Alta", "Media", "Baja"][i % 3],
+        cancelado: !!servicio.cancelacion,
       };
-    }).filter(a => a.minutos >= 0 && a.minutos < 180);
+    }).filter(a => a.minutos >= 0 && a.minutos < 180 && !a.cancelado);
 
     llegadas.sort((a, b) => a.minutos - b.minutos);
     console.log(`  → ${llegadas.length} arribos para "${estacion}" (id: ${estId})`);
