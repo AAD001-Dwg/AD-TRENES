@@ -4,10 +4,6 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { createWriteStream, createReadStream, existsSync } from "fs";
-import { pipeline } from "stream/promises";
-import { createUnzip } from "zlib";
-import { createInterface } from "readline";
 
 dotenv.config();
 
@@ -19,107 +15,61 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ── Mapa de stop_id: "nombre normalizado" → stop_id real ─────────────────────
-let stopMap = {}; // ej: { "hudson": "22045", "constitución": "22001" }
+// ── Mapa stop_id: "nombre normalizado" → stop_id real ────────────────────────
+let stopMap = {};
 let stopsLoaded = false;
 
-// Normaliza el nombre de una estación para comparar
 function normalizar(s) {
   return s.toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar tildes
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, "").trim();
 }
 
-// Descarga el GTFS estático y parsea stops.txt para obtener stop_ids reales
 async function cargarStops() {
   try {
-    console.log("📥 Descargando GTFS estático de trenes...");
+    console.log("📥 Descargando GTFS estático...");
     const res = await fetch(GTFS_ZIP_URL, { signal: AbortSignal.timeout(30000) });
-    if (!res.ok) throw new Error(`GTFS download failed: ${res.status}`);
-
-    // Guardar el zip temporalmente
-    const zipPath = "/tmp/trenes-gtfs.zip";
-    await pipeline(res.body, createWriteStream(zipPath));
-
-    // Descomprimir y parsear stops.txt usando AdmZip via dynamic import
-    // Como no tenemos AdmZip, usamos unzipper via node streams
+    if (!res.ok) throw new Error(`GTFS ${res.status}`);
+    const buf = await res.arrayBuffer();
     const AdmZip = (await import("adm-zip")).default;
-    const zip = new AdmZip(zipPath);
-    const stopsEntry = zip.getEntry("stops.txt");
-    if (!stopsEntry) throw new Error("stops.txt no encontrado en el zip");
-
-    const lines = stopsEntry.getData().toString("utf8").split("\n");
+    const zip = new AdmZip(Buffer.from(buf));
+    const entry = zip.getEntry("stops.txt");
+    if (!entry) throw new Error("stops.txt no encontrado");
+    const lines = entry.getData().toString("utf8").split("\n");
     const header = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
     const idIdx = header.indexOf("stop_id");
     const nameIdx = header.indexOf("stop_name");
-
     let count = 0;
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(",").map(c => c.trim().replace(/"/g, ""));
       if (cols.length <= Math.max(idIdx, nameIdx)) continue;
-      const id = cols[idIdx];
-      const name = cols[nameIdx];
-      if (id && name) {
-        stopMap[normalizar(name)] = id;
-        count++;
-      }
+      const id = cols[idIdx]; const name = cols[nameIdx];
+      if (id && name) { stopMap[normalizar(name)] = id; count++; }
     }
-
     stopsLoaded = true;
     console.log(`✅ ${count} estaciones cargadas del GTFS`);
   } catch (e) {
-    console.warn("⚠️ No se pudo cargar GTFS stops:", e.message);
-    console.log("   Usando stop_ids de respaldo hardcodeados...");
-    // Fallback: stop_ids conocidos de las estaciones principales
-    // (obtenidos del GTFS público de Trenes Argentinos)
+    console.warn("⚠️  GTFS falló, usando stop_ids de respaldo:", e.message);
+    // IDs de respaldo (del GTFS estático público de Trenes Argentinos)
     stopMap = {
-      // Roca
-      "constitucion":        "22001",
-      "avellaneda":          "22003",
-      "lanus":               "22005",
-      "lomas de zamora":     "22007",
-      "banfield":            "22009",
-      "temperley":           "22011",
-      "hudson":              "22045",
-      "la plata":            "22021",
-      // Mitre
-      "retiro":              "20001",
-      "palermo":             "20003",
-      "belgrano c":          "20005",
-      "nunez":               "20007",
-      "rivadavia":           "20009",
-      "san isidro":          "20015",
-      "tigre":               "20025",
-      // Sarmiento
-      "once":                "21001",
-      "caballito":           "21003",
-      "flores":              "21005",
-      "liniers":             "21007",
-      "moron":               "21011",
-      "ituzaingo":           "21013",
-      "moreno":              "21017",
-      // San Martín
-      "villa del parque":    "23007",
-      "el palomar":          "23015",
-      "merlo":               "23025",
-      // Belgrano Norte
-      "fc central":          "24001",
-      "colegiales":          "24005",
-      "villa urquiza":       "24009",
-      // Belgrano Sur
-      "pompeya":             "25003",
-      "villa soldati":       "25005",
-      "gonzalez catan":      "25015",
+      "constitucion": "93", "avellaneda": "94", "lanus": "95",
+      "lomas de zamora": "96", "banfield": "97", "temperley": "98",
+      "hudson": "176", "la plata": "107",
+      "retiro": "463", "palermo": "401", "belgrano c": "321",
+      "nunez": "322", "san isidro": "470", "tigre": "501",
+      "once": "293", "caballito": "294", "flores": "295",
+      "liniers": "296", "moron": "297", "ituzaingo": "298", "moreno": "299",
+      "villa del parque": "550", "el palomar": "551", "merlo": "552",
+      "colegiales": "601", "villa urquiza": "602",
+      "pompeya": "700", "villa soldati": "701", "gonzalez catan": "702",
     };
     stopsLoaded = true;
   }
 }
 
-// Resuelve el stop_id a partir del nombre de la estación
 function resolverStopId(nombre) {
   const norm = normalizar(nombre);
   if (stopMap[norm]) return stopMap[norm];
-  // Búsqueda parcial
   for (const [key, id] of Object.entries(stopMap)) {
     if (key.includes(norm) || norm.includes(key)) return id;
   }
@@ -129,12 +79,9 @@ function resolverStopId(nombre) {
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-// ── Servir la app HTML ────────────────────────────────────────────────────────
-app.get("/", (_req, res) => {
-  res.sendFile(join(__dirname, "trenes-ar-final.html"));
-});
+app.get("/", (_req, res) => res.sendFile(join(__dirname, "trenes-ar-final.html")));
 
-// ── Helper API gobierno ───────────────────────────────────────────────────────
+// ── Helper gobierno ───────────────────────────────────────────────────────────
 async function govFetch(endpoint, extra = {}) {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -143,56 +90,73 @@ async function govFetch(endpoint, extra = {}) {
   });
   const res = await fetch(`${GOV_API}${endpoint}?${params}`, {
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`GOV API ${res.status}`);
+  if (!res.ok) throw new Error(`GOV API ${res.status} en ${endpoint}`);
   return res.json();
 }
 
-// ── RUTAS ─────────────────────────────────────────────────────────────────────
+// ── HEALTH ────────────────────────────────────────────────────────────────────
+app.get("/api/health", (_req, res) => res.json({
+  status: "ok", ts: new Date().toISOString(),
+  creds: !!(CLIENT_ID && CLIENT_SECRET),
+  stops_loaded: stopsLoaded, stops_count: Object.keys(stopMap).length,
+}));
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    ts: new Date().toISOString(),
-    creds: !!(CLIENT_ID && CLIENT_SECRET),
-    stops_loaded: stopsLoaded,
-    stops_count: Object.keys(stopMap).length,
-  });
-});
+// ── STOPS (debug) ─────────────────────────────────────────────────────────────
+app.get("/api/trenes/stops", (_req, res) =>
+  res.json({ loaded: stopsLoaded, count: Object.keys(stopMap).length, stops: stopMap })
+);
 
-// Llegadas — resuelve el nombre a stop_id real automáticamente
+// ── LLEGADAS: usa tripUpdates y filtra por stop_id ────────────────────────────
+// El endpoint /trenes/arrivalDeparture fue discontinuado → da 404 siempre.
+// La forma correcta GTFS-RT es bajar tripUpdates y filtrar.
 app.get("/api/trenes/llegadas", async (req, res) => {
   try {
-    let { stop_id, estacion } = req.query;
+    const estacion = req.query.estacion;
+    const stopId = resolverStopId(estacion || "");
+    if (!stopId) {
+      console.warn(`  No se encontró stop_id para "${estacion}"`);
+      return res.json({ entity: [], source: "sin_stop_id" });
+    }
+    console.log(`  "${estacion}" → stop_id ${stopId}`);
 
-    // Si viene nombre de estación, resolverlo a ID real
-    if (estacion && !stop_id) {
-      const resolved = resolverStopId(estacion);
-      if (resolved) {
-        stop_id = resolved;
-        console.log(`  "${estacion}" → stop_id ${stop_id}`);
-      } else {
-        console.warn(`  No se encontró stop_id para "${estacion}"`);
-        // Intentar de todas formas con tripUpdates filtrado
-        const allData = await govFetch("/trenes/tripUpdates");
-        return res.json(allData); // el cliente filtrará
-      }
+    // Traer todos los tripUpdates y filtrar por esta parada
+    const data = await govFetch("/trenes/tripUpdates");
+    const entities = data?.entity || [];
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // Filtrar los viajes que pasan por esta parada y extraer el tiempo de llegada
+    const llegadas = [];
+    for (const e of entities) {
+      const tu = e.trip_update;
+      if (!tu) continue;
+      const stus = tu.stop_time_update || [];
+      const stu = stus.find(s => String(s.stop_id) === String(stopId));
+      if (!stu) continue;
+      const arrival = stu.arrival || stu.departure || {};
+      const t = arrival.time || arrival.delay;
+      if (!t) continue;
+      const minutos = Math.round((t - nowSec) / 60);
+      if (minutos < -2 || minutos > 120) continue; // ignorar pasados y muy lejanos
+      llegadas.push({
+        tripId: tu.trip?.trip_id,
+        routeId: tu.trip?.route_id,
+        minutos,
+        hora: new Date(t * 1000).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }),
+        demora: arrival.delay ? Math.round(arrival.delay / 60) : 0,
+        stopId,
+      });
     }
 
-    if (!stop_id) return res.status(400).json({ error: "Falta stop_id o estacion" });
-    const data = await govFetch("/trenes/arrivalDeparture", { stop_id });
-    res.json(data);
+    // Ordenar por minutos
+    llegadas.sort((a, b) => a.minutos - b.minutos);
+    console.log(`  → ${llegadas.length} trenes encontrados para ${estacion}`);
+    res.json({ entity: llegadas, stop_id: stopId, estacion });
   } catch (e) {
     console.error("Error en /llegadas:", e.message);
     res.status(500).json({ error: e.message });
   }
-});
-
-// Devuelve todos los trip updates (para filtrar client-side si hace falta)
-app.get("/api/trenes/actualizaciones", async (_req, res) => {
-  try { res.json(await govFetch("/trenes/tripUpdates")); }
-  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get("/api/trenes/posiciones", async (_req, res) => {
@@ -205,9 +169,9 @@ app.get("/api/trenes/alertas", async (_req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Devuelve el mapa de estaciones resueltas (útil para debug)
-app.get("/api/trenes/stops", (_req, res) => {
-  res.json({ loaded: stopsLoaded, count: Object.keys(stopMap).length, stops: stopMap });
+app.get("/api/trenes/actualizaciones", async (_req, res) => {
+  try { res.json(await govFetch("/trenes/tripUpdates")); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────────────

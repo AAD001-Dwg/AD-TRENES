@@ -493,16 +493,18 @@ async function fetchTrenes(linea,estacion){
   try{
     if(apiStatus!=="ok") throw new Error("no_api");
     const data=await apiFetch("/trenes/arrivalDeparture",{estacion:estacion,linea:linea.id});
-    const arr=data?.entity||data?.arrivals||[];
-    const now=Math.floor(Date.now()/1000);
+    const arr=data?.entity||[];
+    // Nuevo formato del servidor: cada item ya tiene minutos, hora, demora
     const trenes=arr.slice(0,3).map((e,i)=>{
-      const tu=e.trip_update||e;const st=tu?.stop_time_update?.[0]||{};
-      const ar=st?.arrival||{};const t=ar?.time||now+(i+1)*420;
-      const dem=Math.max(0,Math.round((t-(ar?.scheduled||t))/60));
-      return{id:tu?.trip?.trip_id||`T${1000+i}`,dest:(ESTACIONES[linea.id]||[]).at(-1)||"Terminal",
-        min:Math.max(1,Math.round((t-now)/60)),dem,
-        hora:new Date(t*1000).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}),
-        cap:["Alta","Media","Baja"][i%3],anden:(i%4)+1};
+      return{
+        id:e.tripId||`T${1000+i}`,
+        dest:(ESTACIONES[linea.id]||[]).at(-1)||"Terminal",
+        min:Math.max(1,e.minutos||1),
+        dem:e.demora||0,
+        hora:e.hora||"--:--",
+        cap:["Alta","Media","Baja"][i%3],
+        anden:(i%4)+1
+      };
     });
     if(trenes.length) return{trenes,mock:false};
   }catch{}
