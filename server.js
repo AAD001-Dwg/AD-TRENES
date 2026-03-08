@@ -122,6 +122,24 @@ app.get("/api/trenes/alertas", (_req, res) => {
   res.json({ entity: [], source: "sofse_sin_alertas" });
 });
 
+
+// ── DEBUG: ver estructura real de la API SOFSE ───────────────────────────────
+app.get("/api/debug/estacion", async (req, res) => {
+  try {
+    const nombre = req.query.nombre || "Hudson";
+    const raw = await sofseFetch(`/infraestructura/estaciones?nombre=${encodeURIComponent(nombre)}`);
+    res.json({ raw, keys: Array.isArray(raw) ? (raw[0] ? Object.keys(raw[0]) : []) : Object.keys(raw) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/debug/arribos/:id", async (req, res) => {
+  try {
+    const raw = await sofseFetch(`/arribos/estacion/${req.params.id}?cantidad=2`);
+    const item = Array.isArray(raw) ? raw[0] : (raw?.arribos?.[0] || raw);
+    res.json({ raw_sample: item, keys: item ? Object.keys(item) : [] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── ARRANQUE ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚆 Trenes AR · puerto ${PORT}`);
