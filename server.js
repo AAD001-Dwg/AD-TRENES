@@ -35,10 +35,12 @@ async function resolverEstacionId(nombre) {
   const estaciones = Array.isArray(data) ? data : data?.estaciones || [];
   if (estaciones.length === 0) return null;
   // Buscar coincidencia exacta primero, luego parcial
-  const exacta = estaciones.find(e => e.nombre?.toLowerCase() === key);
+  const exacta = estaciones.find(e => (e.nombre || e.name || "").toLowerCase() === key);
   const result = exacta || estaciones[0];
+  // La API puede usar distintos nombres para el campo ID
+  result._resolvedId = result.id_estacion ?? result.idEstacion ?? result.id ?? result.estacionId ?? result.codigo;
   stationCache[key] = result;
-  console.log(`  "${nombre}" → id ${result.id} (${result.nombre})`);
+  console.log(`  "${nombre}" → resolvedId ${result._resolvedId} | keys: ${Object.keys(result).join(',')} | nombre: ${result.nombre||result.name}`);
   return result;
 }
 
@@ -60,34 +62,41 @@ app.get("/api/trenes/llegadas", async (req, res) => {
     const est = await resolverEstacionId(estacion);
     if (!est) return res.json({ llegadas: [], estacion, error: "Estación no encontrada" });
 
-    const data = await sofseFetch(`/arribos/estacion/${est.id}?cantidad=${cantidad}`);
+    const estId = est._resolvedId;
+    if (!estId) {
+      console.warn(`  Sin ID para "${estacion}", claves disponibles: ${Object.keys(est).join(',')}`);
+      return res.json({ llegadas: [], estacion, error: "ID de estación no encontrado", claves: Object.keys(est) });
+    }
+    const data = await sofseFetch(`/arribos/estacion/${estId}?cantidad=${cantidad}`);
     const arribos = Array.isArray(data) ? data : data?.arribos || [];
 
     // Normalizar al formato que espera la app
     const now = new Date();
     const llegadas = arribos.map((a, i) => {
       // La API devuelve hora como "HH:MM:SS" o "HH:MM"
-      const horaStr = a.horaSalida || a.horaLlegada || a.hora || "";
-      const [hh, mm] = horaStr.split(":").map(Number);
+      // Intentar todos los posibles nombres de campos de hora
+      const horaStr = a.horaSalida || a.horaLlegada || a.hora || a.time || a.departure || a.arrival || "";
+      const [hh=0, mm=0] = horaStr.toString().split(":").map(Number);
       const horaTren = new Date(now);
       horaTren.setHours(hh, mm, 0, 0);
-      if (horaTren < now) horaTren.setDate(horaTren.getDate() + 1); // día siguiente
+      if (horaTren < now) horaTren.setDate(horaTren.getDate() + 1);
       const minutos = Math.round((horaTren - now) / 60000);
+      if (i === 0) console.log(`  Arribo[0] keys: ${Object.keys(a).join(',')}`);
       return {
-        id: a.id || i,
+        id: a.id || a.idViaje || i,
         tripId: a.idViaje || a.id || `V${i}`,
-        dest: a.estacionDestino?.nombre || a.destino || "Terminal",
+        dest: a.estacionDestino?.nombre || a.nombreDestino || a.destino || a.hasta?.nombre || "Terminal",
         minutos: Math.max(0, minutos),
-        hora: horaStr.slice(0, 5),
-        demora: a.demora || 0,
-        ramal: a.ramal?.nombre || a.lineaNombre || "",
-        anden: a.anden || a.andén || (i % 4) + 1,
+        hora: horaStr.toString().slice(0, 5),
+        demora: a.demora || a.delay || 0,
+        ramal: a.ramal?.nombre || a.nombreRamal || a.lineaNombre || "",
+        anden: a.anden || a.andén || a.plataforma || (i % 4) + 1,
         cap: ["Alta", "Media", "Baja"][i % 3],
       };
     }).filter(a => a.minutos >= 0 && a.minutos < 180);
 
     llegadas.sort((a, b) => a.minutos - b.minutos);
-    console.log(`  → ${llegadas.length} arribos para "${estacion}" (id: ${est.id})`);
+    console.log(`  → ${llegadas.length} arribos para "${estacion}" (id: ${estId})`);
     res.json({ llegadas, estacion: est.nombre, id: est.id });
   } catch (e) {
     console.error("Error en /llegadas:", e.message);
