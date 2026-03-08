@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0a0f1e"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Trenes AR"/>
+  <title>Trenes AR</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#f0f2f7;--card:#fff;--header:#0a0f1e;--text:#0f172a;--muted:#64748b;
+  --border:#e2e8f0;--radius:16px;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overscroll-behavior:none}
+
+/* HEADER */
+.header{background:var(--header);padding:calc(var(--safe-top) + 14px) 20px 0;position:sticky;top:0;z-index:50}
+.header-top{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px}
+.app-title{color:#fff;font-size:22px;font-weight:800;letter-spacing:-.5px}
+.app-sub{color:#475569;font-size:11px;margin-top:1px;font-family:'DM Mono',monospace}
+.status-pill{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:#1e293b;border:1px solid #334155;cursor:pointer}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* LINEAS */
+.lineas-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none}
+.lineas-scroll::-webkit-scrollbar{display:none}
+.linea-btn{padding:7px 16px;border-radius:20px;border:2px solid transparent;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;background:#1e293b;transition:transform .1s}
+.linea-btn:active{transform:scale(.95)}
+
+/* CONTENT */
+.content{padding:16px 16px calc(var(--safe-bottom) + 80px);max-width:500px;margin:0 auto}
+
+/* ESTACION CARD */
+.estacion-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.estacion-label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.08em}
+.estacion-select{font-size:17px;font-weight:700;color:var(--text);border:none;background:transparent;outline:none;cursor:pointer;width:100%;margin-top:2px;font-family:'DM Sans',sans-serif}
+.linea-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+
+/* BANNER */
+.banner{border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.5}
+.banner-warn{background:#fefce8;border:1px solid #fde047;color:#713f12}
+.banner-ok{background:#f0fdf4;border:1px solid #86efac;color:#14532d}
+.banner strong{font-weight:700;display:block;margin-bottom:3px}
+.banner code{background:rgba(0,0,0,.07);padding:2px 5px;border-radius:4px;font-family:'DM Mono',monospace;font-size:12px}
+
+/* CARDS */
+.section-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;margin-bottom:14px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.live-badge{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;font-family:'DM Mono',monospace}
+.live-dot{width:6px;height:6px;border-radius:50%}
+
+/* TREN CARDS */
+.tren-card{border-radius:12px;padding:14px;border:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff}
+.tren-card.proximo{background:#f0fdf4;border-color:#86efac}
+.tren-dest{font-size:14px;font-weight:700}
+.tren-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.tren-min{font-size:26px;font-weight:800;font-family:'DM Mono',monospace;text-align:right}
+.tren-min.demorado{color:#dc2626}
+
+/* BADGE */
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
+
+/* REFRESH */
+.refresh-btn{background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{animation:spin .6s linear infinite}
+
+/* ALERTAS */
+.alerta-card{border-radius:12px;padding:14px;margin-bottom:10px}
+.alerta-title{font-size:14px;font-weight:700}
+.alerta-desc{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.5}
+.alerta-meta{font-size:11px;color:#94a3b8;margin-top:8px}
+
+/* HORARIOS */
+.horario-row{display:grid;grid-template-columns:70px 1fr 90px 70px;padding:12px 2px;border-bottom:1px solid var(--border);align-items:center}
+.horario-row:last-child{border-bottom:none}
+.horario-hora{font-size:16px;font-weight:700;font-family:'DM Mono',monospace}
+
+/* BOTTOM NAV */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--header);padding:10px 0 calc(var(--safe-bottom) + 10px);display:flex;border-top:1px solid #1e293b;z-index:50}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;padding:6px 4px;position:relative}
+.nav-btn .nav-icon{font-size:20px}
+.nav-btn .nav-label{font-size:10px;font-weight:700;color:#475569;font-family:'DM Sans',sans-serif;letter-spacing:.03em}
+.nav-btn.active .nav-label{color:#fff}
+.notif-badge{position:absolute;top:2px;right:calc(50% - 18px);background:#ef4444;color:#fff;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+
+/* SPINNER */
+.spinner-wrap{text-align:center;padding:48px 0}
+.spinner-icon{font-size:32px;display:inline-block;animation:spin 1s linear infinite}
+.spinner-text{font-size:13px;color:var(--muted);margin-top:10px}
+
+/* FILTROS */
+.filtros{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filtro-btn{padding:7px 16px;border-radius:20px;font-size:13px;font-weight:700;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer}
+.filtro-btn.active{background:var(--text);color:#fff;border-color:var(--text)}
+
+/* MAPA */
+.mapa-wrap{background:#f8fafc;border-radius:12px;border:1px solid var(--border);overflow:hidden;padding:16px 8px}
+.mapa-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.stat-box{background:#f9fafb;border:1px solid var(--border);border-radius:10px;padding:12px}
+.stat-label{font-size:11px;color:var(--muted);font-weight:600}
+.stat-value{font-size:20px;font-weight:800;margin-top:3px}
+
+/* ══ NOTIFICACIONES ══════════════════════════════════════════════════════ */
+.notif-perm-banner{border-radius:12px;padding:14px;background:#eff6ff;border:1px solid #bfdbfe;margin-bottom:14px}
+.notif-perm-title{font-size:14px;font-weight:700;color:#1e40af;margin-bottom:6px}
+.notif-perm-sub{font-size:12px;color:#3b82f6;line-height:1.5;margin-bottom:12px}
+.btn-notif-perm{width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
+
+.add-alerta-card{background:var(--card);border:2px dashed var(--border);border-radius:var(--radius);padding:20px;margin-bottom:14px;text-align:center;cursor:pointer}
+.add-alerta-card:active{background:#f8fafc}
+.add-icon{font-size:28px;margin-bottom:6px}
+.add-label{font-size:14px;font-weight:700;color:var(--muted)}
+
+.suscripcion-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.sus-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.sus-linea{display:flex;align-items:center;gap:8px}
+.sus-linea-dot{width:10px;height:10px;border-radius:50%}
+.sus-nombre{font-size:15px;font-weight:800}
+.sus-estacion{font-size:13px;color:var(--muted);margin-top:1px}
+.sus-delete{background:none;border:none;font-size:18px;color:#94a3b8;cursor:pointer;padding:4px;line-height:1}
+.sus-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sus-pill{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.sus-toggle{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.toggle-label{font-size:13px;color:var(--muted);flex:1}
+.toggle-switch{position:relative;width:44px;height:26px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute}
+.toggle-slider{position:absolute;inset:0;background:#cbd5e1;border-radius:13px;cursor:pointer;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+input:checked+.toggle-slider{background:#22c55e}
+input:checked+.toggle-slider:before{transform:translateX(18px)}
+
+.notif-log{margin-top:6px}
+.notif-log-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.notif-log-item:last-child{border-bottom:none}
+.notif-log-icon{font-size:18px;flex-shrink:0}
+.notif-log-text{font-size:13px;color:var(--text);line-height:1.4}
+.notif-log-time{font-size:11px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace}
+
+/* MODALES */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end}
+.modal-sheet{background:var(--card);width:100%;border-radius:20px 20px 0 0;padding:24px 20px calc(var(--safe-bottom) + 24px);animation:slideUp .25s ease;max-height:90dvh;overflow-y:auto}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-handle{width:40px;height:4px;background:#e2e8f0;border-radius:2px;margin:0 auto 20px}
+.modal-title{font-size:18px;font-weight:800;margin-bottom:16px}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5}
+.input-group{margin-bottom:16px}
+.input-label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;display:block}
+.input-field{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:15px;font-family:'DM Sans',sans-serif;outline:none;background:#f8fafc}
+.input-field:focus{border-color:#3b82f6;background:#fff}
+.time-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-primary{width:100%;padding:15px;border-radius:12px;border:none;background:var(--text);color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
+.btn-primary:disabled{background:#e2e8f0;color:#94a3b8;cursor:not-allowed}
+.btn-secondary{width:100%;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:8px}
+.warn-box{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px;font-size:12px;color:#92400e;margin-bottom:16px;line-height:1.5}
+.linea-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.linea-option{padding:10px 12px;border-radius:10px;border:2px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;text-align:center;background:#fff;transition:.15s}
+.linea-option.selected{border-color:currentColor}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="app-title">🚆 Trenes AR</div>
+      <div class="app-sub" id="appSub">Red Ferroviaria Metropolitana</div>
+    </div>
+    <button class="status-pill" id="statusBtn" onclick="openConfigModal()">
+      <span class="dot" id="statusDot" style="background:#475569"></span>
+      <span id="statusLabel">Configurar</span>
+    </button>
+  </div>
+  <div class="lineas-scroll" id="lineasScroll"></div>
+</div>
+
+<!-- CONTENT -->
+<div class="content" id="mainContent">
+  <div class="estacion-card">
+    <span style="font-size:18px">📍</span>
+    <div style="flex:1">
+      <div class="estacion-label">ESTACIÓN</div>
+      <select class="estacion-select" id="estacionSelect" onchange="onEstacionChange()"></select>
+    </div>
+    <div class="linea-dot" id="lineaDot"></div>
+  </div>
+  <div id="bannerZone"></div>
+  <div id="tabContent"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-proximos" onclick="setTab('proximos')">
+    <span class="nav-icon">🕐</span><span class="nav-label">Próximos</span>
+  </button>
+  <button class="nav-btn" id="nav-mapa" onclick="setTab('mapa')">
+    <span class="nav-icon">🗺️</span><span class="nav-label">Mapa</span>
+  </button>
+  <button class="nav-btn" id="nav-alertas" onclick="setTab('alertas')" style="position:relative">
+    <span class="nav-icon">⚠️</span><span class="nav-label">Alertas</span>
+    <span class="notif-badge" id="alertCount" style="display:none">2</span>
+  </button>
+  <button class="nav-btn" id="nav-horarios" onclick="setTab('horarios')">
+    <span class="nav-icon">📋</span><span class="nav-label">Horarios</span>
+  </button>
+  <button class="nav-btn" id="nav-notif" onclick="setTab('notif')" style="position:relative">
+    <span class="nav-icon">🔔</span><span class="nav-label">Alertas</span>
+    <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+  </button>
+</nav>
+
+<!-- MODAL CONFIGURACIÓN -->
+<div class="modal-overlay" id="configModal" style="display:none" onclick="closeModalIf(event,'configModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚙️ Configuración</div>
+    <div class="input-group">
+      <label class="input-label">URL del servidor proxy</label>
+      <input class="input-field" id="cfgProxyUrl" type="url" placeholder="https://tu-proxy.onrender.com" autocomplete="off"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Dejá vacío para usar la API directa (puede fallar por CORS)</div>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Client ID <span style="color:#94a3b8">(solo sin proxy)</span></label>
+      <input class="input-field" id="cfgClientId" type="text" placeholder="tu_client_id" autocomplete="off" autocapitalize="none"/>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Client Secret <span style="color:#94a3b8">(solo sin proxy)</span></label>
+      <input class="input-field" id="cfgClientSecret" type="password" placeholder="tu_client_secret" autocomplete="off"/>
+    </div>
+    <div class="warn-box">🔒 Con el proxy, las credenciales viven en el servidor. Sin proxy, se usan desde el navegador (riesgo de CORS).</div>
+    <button class="btn-primary" onclick="saveConfig()">Guardar y conectar</button>
+    <button class="btn-secondary" onclick="closeModal('configModal')">Cancelar</button>
+  </div>
+</div>
+
+<!-- MODAL NUEVA SUSCRIPCIÓN -->
+<div class="modal-overlay" id="susModal" style="display:none" onclick="closeModalIf(event,'susModal')">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔔 Nueva alerta de tren</div>
+
+    <div class="input-group">
+      <label class="input-label">Línea</label>
+      <div class="linea-grid" id="susLineaGrid"></div>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label">Estación</label>
+      <select class="input-field" id="susEstacion" style="cursor:pointer"></select>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label">Franja horaria</label>
+      <div class="time-row">
+        <div>
+          <label class="input-label" style="font-size:10px">Desde</label>
+          <input class="input-field" id="susDesde" type="time" value="07:00"/>
+        </div>
+        <div>
+          <label class="input-label" style="font-size:10px">Hasta</label>
+          <input class="input-field" id="susHasta" type="time" value="10:00"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label class="input-label">Notificar cuando el tren esté a</label>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600" id="lbl20">
+          <input type="checkbox" id="chk20" checked style="width:16px;height:16px;accent-color:#0f172a"/> 20 minutos
+        </label>
+        <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600" id="lbl10">
+          <input type="checkbox" id="chk10" checked style="width:16px;height:16px;accent-color:#0f172a"/> 10 minutos
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="saveSusBtn" onclick="saveSuscripcion()">Guardar alerta</button>
+    <button class="btn-secondary" onclick="closeModal('susModal')">Cancelar</button>
+  </div>
+</div>
+
+<script>
+// ══ DATA ══════════════════════════════════════════════════════════════════════
+const LINEAS = [
+  {id:"mitre",         nombre:"Mitre",         color:"#E63946"},
+  {id:"sarmiento",     nombre:"Sarmiento",     color:"#F4A261"},
+  {id:"roca",          nombre:"Roca",          color:"#2A9D8F"},
+  {id:"san-martin",    nombre:"San Martín",    color:"#457B9D"},
+  {id:"belgrano-norte",nombre:"Bel. Norte",    color:"#D4A017"},
+  {id:"belgrano-sur",  nombre:"Bel. Sur",      color:"#8B5CF6"},
+];
+const ESTACIONES = {
+  mitre:           ["Retiro","Palermo","Belgrano C","Núñez","Rivadavia","San Isidro","Tigre"],
+  sarmiento:       ["Once","Caballito","Flores","Liniers","Morón","Ituzaingó","Moreno"],
+  roca:            ["Constitución","Avellaneda","Lanús","Lomas de Zamora","Banfield","Temperley","Hudson","La Plata"],
+  "san-martin":    ["Retiro","Palermo","Villa del Parque","El Palomar","Merlo"],
+  "belgrano-norte":["F.C. Central","Villa del Parque","Palermo","Colegiales","Villa Urquiza"],
+  "belgrano-sur":  ["Buenos Aires","Pompeya","Villa Soldati","González Catán"],
+};
+const MOCK_ALERTAS=[
+  {tipo:"demora",linea:"Sarmiento",titulo:"Demoras en Sarmiento",desc:"Hasta 20 min por desperfecto técnico entre Flores y Liniers.",tiempo:"Hace 10 min",activa:true},
+  {tipo:"corte", linea:"Roca",     titulo:"Servicio suspendido", desc:"Suspensión parcial entre Constitución y Avellaneda.",        tiempo:"Hace 35 min",activa:true},
+  {tipo:"info",  linea:"Mitre",    titulo:"Frecuencia reducida", desc:"Ramal Tigre opera con frecuencia reducida hasta las 14:00.", tiempo:"Hace 1 h",  activa:false},
+];
+const MOCK_HORARIOS=[
+  {hora:"06:00",dest:"Tigre",          dias:"Lun–Vie",tipo:"Directo"},
+  {hora:"06:15",dest:"José León Suárez",dias:"Todos",  tipo:"Local"},
+  {hora:"06:30",dest:"Tigre",          dias:"Todos",   tipo:"Directo"},
+  {hora:"06:45",dest:"Bartolomé Mitre",dias:"Lun–Vie", tipo:"Local"},
+  {hora:"07:00",dest:"Tigre",          dias:"Todos",   tipo:"Directo"},
+  {hora:"07:30",dest:"Tigre",          dias:"Todos",   tipo:"Directo"},
+  {hora:"07:45",dest:"Bartolomé Mitre",dias:"Todos",   tipo:"Local"},
+  {hora:"08:00",dest:"Tigre",          dias:"Todos",   tipo:"Directo"},
+];
+
+// ══ STATE ══════════════════════════════════════════════════════════════════════
+let lineaActiva = LINEAS[2]; // Roca por defecto (tiene Hudson)
+let estacionActiva = "Hudson";
+let tabActivo = "proximos";
+let apiStatus = null; // null | "ok" | "cors" | "error"
+let proxyUrl = localStorage.getItem("proxyUrl") || "";
+let creds = {
+  client_id: localStorage.getItem("clientId") || "",
+  client_secret: localStorage.getItem("clientSecret") || "",
+};
+let mapaTimer = null, mapaPos = [0,50];
+let refreshTimer = null;
+// Suscripciones de notificaciones
+let suscripciones = JSON.parse(localStorage.getItem("suscripciones") || "[]");
+// Log de notificaciones enviadas
+let notifLog = JSON.parse(localStorage.getItem("notifLog") || "[]");
+// Evitar notificaciones duplicadas en la misma sesión
+let notifSent = new Set();
+let susLineaSeleccionada = LINEAS[2];
+let pollingTimer = null;
+let filtroAlertas = "todas";
+
+// ══ INIT ══════════════════════════════════════════════════════════════════════
+window.addEventListener("DOMContentLoaded", () => {
+  renderLineas();
+  updateEstaciones();
+  renderTab();
+  renderBanner();
+  updateStatusUI();
+  updateNotifBadge();
+  if (proxyUrl || creds.client_id) testConexion();
+  startPolling();
+  // Pedir permiso de notificaciones si ya hay suscripciones
+  if (suscripciones.length > 0) requestNotifPermission();
+});
+
+// ══ API ════════════════════════════════════════════════════════════════════════
+async function apiFetch(endpoint, params = {}) {
+  let url;
+  if (proxyUrl) {
+    // Usar proxy
+    const p = new URLSearchParams(params);
+    const pathMap = {
+      "/trenes/arrivalDeparture": `/api/trenes/llegadas?${p}`,
+      "/trenes/vehiclePositions": "/api/trenes/posiciones",
+      "/trenes/alerts":           "/api/trenes/alertas",
+    };
+    url = proxyUrl.replace(/\/$/, "") + (pathMap[endpoint] || endpoint);
+    const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  } else {
+    // Directo a la API (puede fallar por CORS)
+    const p = new URLSearchParams({client_id:creds.client_id, client_secret:creds.client_secret, ...params});
+    url = `https://apitransporte.buenosaires.gob.ar${endpoint}?${p}`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+}
+
+async function testConexion() {
+  updateStatusUI("checking");
+  try {
+    if (proxyUrl) {
+      const r = await fetch(proxyUrl.replace(/\/$/,"") + "/api/health", {signal: AbortSignal.timeout(5000)});
+      const d = await r.json();
+      apiStatus = d.status === "ok" ? "ok" : "error";
+    } else {
+      await apiFetch("/trenes/alerts");
+      apiStatus = "ok";
+    }
+  } catch(e) {
+    apiStatus = e instanceof TypeError ? "cors" : "error";
+  }
+  updateStatusUI();
+  renderBanner();
+  renderTab();
+}
+
+// ══ UI STATE ══════════════════════════════════════════════════════════════════
+function updateStatusUI(state) {
+  const s = state || apiStatus;
+  const dot = document.getElementById("statusDot");
+  const lbl = document.getElementById("statusLabel");
+  const map = {
+    null:     ["#475569","Configurar"],
+    checking: ["#f59e0b","Probando…"],
+    ok:       ["#4ade80","En vivo"],
+    cors:     ["#fb923c","CORS"],
+    error:    ["#f87171","Error"],
+  };
+  const [c,t] = map[s] ?? map[null];
+  dot.style.background = c;
+  lbl.textContent = t;
+}
+
+function renderBanner() {
+  const z = document.getElementById("bannerZone");
+  if (apiStatus === "ok") {
+    z.innerHTML = `<div class="banner banner-ok">✅ <strong>Datos en tiempo real activos</strong></div>`;
+  } else if (apiStatus === "cors") {
+    z.innerHTML = `<div class="banner banner-warn"><strong>⚠️ Bloqueado por CORS</strong>Configurá la URL del proxy Render. <a href="#" onclick="openConfigModal()" style="color:#92400e;font-weight:700">← Configurar</a></div>`;
+  } else if (apiStatus === "error") {
+    z.innerHTML = `<div class="banner banner-warn"><strong>⚠️ Error de conexión</strong><a href="#" onclick="openConfigModal()" style="color:#92400e;font-weight:700">← Revisar configuración</a></div>`;
+  } else {
+    z.innerHTML = `<div class="banner banner-warn"><strong>ℹ️ Modo demo</strong>Tocá <strong>"Configurar"</strong> arriba para conectar la API.</div>`;
+  }
+}
+
+// ══ LINEAS / ESTACIONES ═══════════════════════════════════════════════════════
+function renderLineas() {
+  document.getElementById("lineasScroll").innerHTML = LINEAS.map(l =>
+    `<button class="linea-btn${l.id===lineaActiva.id?' active':''}"
+      style="background:${l.id===lineaActiva.id?l.color:'#1e293b'};border-color:${l.id===lineaActiva.id?l.color:'transparent'};color:#fff"
+      onclick="selectLinea('${l.id}')">${l.nombre}</button>`
+  ).join("");
+}
+function selectLinea(id) {
+  lineaActiva = LINEAS.find(l=>l.id===id);
+  estacionActiva = ESTACIONES[id][0];
+  renderLineas(); updateEstaciones(); renderTab();
+}
+function updateEstaciones() {
+  const sel = document.getElementById("estacionSelect");
+  sel.innerHTML = (ESTACIONES[lineaActiva.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
+  sel.value = estacionActiva;
+  document.getElementById("lineaDot").style.background = lineaActiva.color;
+}
+function onEstacionChange() {
+  estacionActiva = document.getElementById("estacionSelect").value;
+  if (tabActivo==="proximos") renderTab();
+}
+
+// ══ TABS ══════════════════════════════════════════════════════════════════════
+function setTab(tab) {
+  tabActivo = tab;
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+  document.getElementById("nav-"+tab).classList.add("active");
+  if (mapaTimer){clearInterval(mapaTimer);mapaTimer=null}
+  if (refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
+  renderTab();
+}
+function renderTab() {
+  const z = document.getElementById("tabContent");
+  if (tabActivo==="proximos") renderProximos(z);
+  else if (tabActivo==="mapa") renderMapa(z);
+  else if (tabActivo==="alertas") renderAlertas(z);
+  else if (tabActivo==="horarios") renderHorarios(z);
+  else if (tabActivo==="notif") renderNotif(z);
+}
+
+// ══ MOCK ══════════════════════════════════════════════════════════════════════
+function genTrenes() {
+  const now = new Date();
+  return Array.from({length:5},(_,i)=>{
+    const min=Math.floor(Math.random()*4)+i*7+1;
+    const dem=Math.random()>.7?Math.floor(Math.random()*12)+1:0;
+    const dest=ESTACIONES[lineaActiva.id].at(-1);
+    return {
+      id:`T${Math.floor(Math.random()*9000)+1000}`,
+      dest, min:min+dem, dem,
+      hora:new Date(now.getTime()+(min+dem)*60000).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}),
+      cap:["Alta","Media","Baja"][Math.floor(Math.random()*3)],
+      anden:(i%4)+1,
+    };
+  });
+}
+function capBadge(n){
+  const m={Alta:["#fee2e2","#991b1b"],Media:["#fef9c3","#854d0e"],Baja:["#dcfce7","#166534"]};
+  const [bg,c]=m[n]||m.Media;
+  return `<span class="badge" style="background:${bg};color:${c}">● ${n}</span>`;
+}
+
+// ══ PRÓXIMOS ══════════════════════════════════════════════════════════════════
+async function renderProximos(z) {
+  z.innerHTML=`<div class="spinner-wrap"><div class="spinner-icon">⟳</div><div class="spinner-text">Buscando trenes…</div></div>`;
+  let trenes=[]; let mock=true;
+  try {
+    if (apiStatus==="ok") {
+      const stopId=`${lineaActiva.id}_${estacionActiva}`.replace(/\s/g,"_").toLowerCase();
+      const data=await apiFetch("/trenes/arrivalDeparture",{stop_id:stopId});
+      const arr=data?.entity||data?.arrivals||[];
+      const now=Math.floor(Date.now()/1000);
+      trenes=arr.slice(0,5).map((e,i)=>{
+        const tu=e.trip_update||e; const st=tu?.stop_time_update?.[0]||{};
+        const ar=st?.arrival||{}; const t=ar?.time||now+(i+1)*420;
+        const dem=Math.max(0,Math.round((t-(ar?.scheduled||t))/60));
+        return {id:tu?.trip?.trip_id||`T${1000+i}`,dest:ESTACIONES[lineaActiva.id].at(-1),
+          min:Math.max(1,Math.round((t-now)/60)),dem,
+          hora:new Date(t*1000).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}),
+          cap:["Alta","Media","Baja"][i%3],anden:(i%4)+1};
+      });
+      if (trenes.length) mock=false;
+    }
+  } catch {}
+  if (!trenes.length) trenes=genTrenes();
+
+  z.innerHTML=`
+    <div class="section-card">
+      <div class="section-header">
+        <span class="section-title">Próximos trenes</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="live-badge">
+            <span class="live-dot" style="background:${mock?'#f59e0b':'#22c55e'};${!mock?'box-shadow:0 0 0 3px #dcfce7':''}"></span>
+            <span style="color:var(--muted)">${mock?'DEMO':'EN VIVO'}</span>
+          </div>
+          <button class="refresh-btn" id="refreshBtn" onclick="refreshProximos()">↻</button>
+        </div>
+      </div>
+      ${trenes.map((t,i)=>`
+        <div class="tren-card${i===0?' proximo':''}">
+          <div>
+            <div class="tren-dest">→ ${t.dest}</div>
+            <div class="tren-sub">#${t.id} · Andén ${t.anden}</div>
+            <div style="margin-top:6px">${capBadge(t.cap)}</div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;text-align:right;margin-bottom:4px">${t.hora}</div>
+            <div class="tren-min${t.dem>0?' demorado':''}">${t.min}<small style="font-size:14px;font-weight:600"> min</small></div>
+            <div style="font-size:11px;font-weight:600;text-align:right;color:${t.dem>0?'#dc2626':'#16a34a'}">${t.dem>0?`▲ +${t.dem} min`:'En horario'}</div>
+          </div>
+        </div>`).join("")}
+    </div>`;
+  refreshTimer=setInterval(()=>renderProximos(document.getElementById("tabContent")),30000);
+}
+function refreshProximos(){
+  const b=document.getElementById("refreshBtn");
+  if(b)b.classList.add("spinning");
+  clearInterval(refreshTimer);
+  renderProximos(document.getElementById("tabContent"));
+}
+
+// ══ MAPA ══════════════════════════════════════════════════════════════════════
+function renderMapa(z) {
+  const ests=ESTACIONES[lineaActiva.id]||[];
+  const W=360,H=160,pad=40,step=(W-pad*2)/(ests.length-1),y=H/2,color=lineaActiva.color;
+  const drawSvg=()=>{
+    const el=document.getElementById("mapaSvg"); if(!el)return;
+    const trenes=mapaPos.map((pos,i)=>{
+      const x=pad+(pos/100)*(W-pad*2);
+      return `<g transform="translate(${x},${y})"><rect x="-15" y="-12" width="30" height="22" rx="5" fill="${color}" opacity="${i===0?1:.6}"/><text x="0" y="7" text-anchor="middle" font-size="12" fill="white">🚆</text></g>`;
+    }).join("");
+    el.innerHTML=`
+      ${Array.from({length:ests.length*3}).map((_,i)=>{const xT=pad+(i/(ests.length*3-1))*(W-pad*2);return`<line x1="${xT}" y1="${y-5}" x2="${xT}" y2="${y+5}" stroke="#e2e8f0" stroke-width="2.5"/>`;}).join("")}
+      <line x1="${pad}" y1="${y-2}" x2="${W-pad}" y2="${y-2}" stroke="#cbd5e1" stroke-width="2"/>
+      <line x1="${pad}" y1="${y+2}" x2="${W-pad}" y2="${y+2}" stroke="#cbd5e1" stroke-width="2"/>
+      <line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="${color}" stroke-width="1.5" stroke-opacity=".4"/>
+      ${ests.map((e,i)=>{const x=pad+i*step,isEnd=i===0||i===ests.length-1;return`<g><circle cx="${x}" cy="${y}" r="${isEnd?7:5}" fill="${isEnd?color:'#fff'}" stroke="${color}" stroke-width="2"/><text x="${x}" y="${y-16}" text-anchor="middle" font-size="9" fill="#374151">${e.length>9?e.slice(0,8)+'.':e}</text></g>`;}).join("")}
+      ${trenes}`;
+  };
+  z.innerHTML=`<div class="section-card"><div class="section-header"><span class="section-title">Posición en vivo</span><div class="live-badge"><span class="live-dot" style="background:#f59e0b"></span><span style="color:var(--muted)">SIMULADO</span></div></div><div class="mapa-wrap"><svg id="mapaSvg" width="100%" viewBox="0 0 ${W} ${H}" style="display:block"></svg></div><div class="mapa-stats"><div class="stat-box"><div class="stat-label">🚆 Trenes activos</div><div class="stat-value">2</div></div><div class="stat-box"><div class="stat-label">🏛 Estaciones</div><div class="stat-value">${ests.length}</div></div></div></div>`;
+  drawSvg();
+  mapaTimer=setInterval(()=>{mapaPos=mapaPos.map(p=>(p+1)%100);drawSvg();},80);
+}
+
+// ══ ALERTAS ═══════════════════════════════════════════════════════════════════
+async function renderAlertas(z) {
+  z.innerHTML=`<div class="spinner-wrap"><div class="spinner-icon">⟳</div></div>`;
+  let alertas=MOCK_ALERTAS;
+  try {
+    if(apiStatus==="ok"){
+      const data=await apiFetch("/trenes/alerts");
+      const arr=data?.entity||[];
+      if(arr.length) alertas=arr.slice(0,6).map((e,i)=>{
+        const a=e.alert||{};
+        const titulo=a?.header_text?.translation?.[0]?.text||"Alerta";
+        const desc=a?.description_text?.translation?.[0]?.text||"";
+        const cause=(a?.cause||"").toLowerCase();
+        return{tipo:cause.includes("construction")?"corte":cause.includes("tech")?"demora":"info",linea:"Red",titulo,desc,tiempo:"Reciente",activa:true};
+      });
+    }
+  } catch{}
+  const activas=alertas.filter(a=>a.activa).length;
+  document.getElementById("alertCount").textContent=activas;
+  document.getElementById("alertCount").style.display=activas>0?"flex":"none";
+  const tipos={demora:{bg:"#fff7ed",border:"#fed7aa",tc:"#c2410c",icon:"⚠️"},corte:{bg:"#fef2f2",border:"#fecaca",tc:"#b91c1c",icon:"🚫"},info:{bg:"#eff6ff",border:"#bfdbfe",tc:"#1d4ed8",icon:"ℹ️"}};
+  const vis=filtroAlertas==="activas"?alertas.filter(a=>a.activa):alertas;
+  z.innerHTML=`
+    <div class="filtros">
+      <button class="filtro-btn${filtroAlertas==='todas'?' active':''}" onclick="setFiltroAlertas('todas')">Todas</button>
+      <button class="filtro-btn${filtroAlertas==='activas'?' active':''}" onclick="setFiltroAlertas('activas')">Activas <span class="badge" style="background:#ef4444;color:#fff;margin-left:4px">${activas}</span></button>
+    </div>
+    ${vis.map(a=>{const c=tipos[a.tipo]||tipos.info;return`<div class="alerta-card" style="background:${c.bg};border:1px solid ${c.border}"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div style="display:flex;gap:10px"><span style="font-size:18px">${c.icon}</span><div><div class="alerta-title" style="color:${c.tc}">${a.titulo}</div><div class="alerta-desc">${a.desc}</div><div class="alerta-meta">Línea ${a.linea} · ${a.tiempo}</div></div></div><span class="badge" style="background:${a.activa?'#dc2626':'#d1d5db'};color:${a.activa?'#fff':'#6b7280'};flex-shrink:0">${a.activa?'ACTIVA':'RESUELTA'}</span></div></div>`;}).join("")}`;
+}
+function setFiltroAlertas(f){filtroAlertas=f;renderAlertas(document.getElementById("tabContent"));}
+
+// ══ HORARIOS ══════════════════════════════════════════════════════════════════
+function renderHorarios(z) {
+  const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
+  const color=lineaActiva.color;
+  z.innerHTML=`<div class="section-card"><div class="section-header"><span class="section-title">Salidas desde ${ESTACIONES[lineaActiva.id][0]}</span></div><div><div style="display:grid;grid-template-columns:70px 1fr 90px 70px;padding:8px 2px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;border-bottom:2px solid var(--border)"><span>HORA</span><span>DESTINO</span><span>DÍAS</span><span>TIPO</span></div>${MOCK_HORARIOS.map(h=>{const p=h.hora<hora;return`<div class="horario-row" style="opacity:${p?.4:1}"><span class="horario-hora" style="color:${p?'#94a3b8':color}">${h.hora}</span><span style="font-size:13px;font-weight:500;color:${p?'var(--muted)':'var(--text)'}">→ ${h.dest}</span><span style="font-size:11px;color:var(--muted)">${h.dias}</span><span class="badge" style="background:${h.tipo==='Directo'?'#dbeafe':'#f3f4f6'};color:${h.tipo==='Directo'?'#1d4ed8':'#374151'}">${h.tipo}</span></div>`;}).join("")}</div></div>`;
+}
+
+// ══ NOTIFICACIONES: RENDER ════════════════════════════════════════════════════
+function renderNotif(z) {
+  const permOk = Notification.permission === "granted";
+  const permBanner = !permOk ? `
+    <div class="notif-perm-banner">
+      <div class="notif-perm-title">🔔 Activar notificaciones</div>
+      <div class="notif-perm-sub">Para recibir alertas cuando el tren esté llegando, necesitamos permiso para enviarte notificaciones.</div>
+      <button class="btn-notif-perm" onclick="requestNotifPermission()">Activar notificaciones</button>
+    </div>` : "";
+
+  const susHtml = suscripciones.length === 0 ? `
+    <div style="text-align:center;padding:32px 0;color:var(--muted)">
+      <div style="font-size:48px;margin-bottom:12px">🔕</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">Sin alertas configuradas</div>
+      <div style="font-size:13px">Tocá el botón de abajo para crear tu primera alerta</div>
+    </div>` :
+    suscripciones.map((s,i) => {
+      const linea = LINEAS.find(l=>l.id===s.lineaId)||LINEAS[0];
+      return `
+      <div class="suscripcion-card">
+        <div class="sus-header">
+          <div class="sus-linea">
+            <div class="sus-linea-dot" style="background:${linea.color}"></div>
+            <div>
+              <div class="sus-nombre">${linea.nombre} · ${s.estacion}</div>
+              <div class="sus-estacion">Franja ${s.desde} – ${s.hasta}</div>
+            </div>
+          </div>
+          <button class="sus-delete" onclick="deleteSus(${i})">✕</button>
+        </div>
+        <div class="sus-pills">
+          ${s.aviso20?`<span class="sus-pill" style="background:#dbeafe;color:#1d4ed8">⏰ 20 minutos</span>`:''}
+          ${s.aviso10?`<span class="sus-pill" style="background:#dcfce7;color:#166534">⏰ 10 minutos</span>`:''}
+        </div>
+        <div class="sus-toggle">
+          <span class="toggle-label">${s.activa?'Alerta activa':'Alerta pausada'}</span>
+          <label class="toggle-switch">
+            <input type="checkbox" ${s.activa?'checked':''} onchange="toggleSus(${i},this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>`;
+    }).join("");
+
+  const logHtml = notifLog.length > 0 ? `
+    <div class="section-card">
+      <div class="section-header"><span class="section-title">Historial de alertas</span>
+        <button onclick="clearLog()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer">Limpiar</button>
+      </div>
+      <div class="notif-log">
+        ${notifLog.slice(0,10).map(n=>`
+          <div class="notif-log-item">
+            <span class="notif-log-icon">${n.min<=10?'🚨':'⚠️'}</span>
+            <div>
+              <div class="notif-log-text"><strong>${n.lineaNombre}</strong> en ${n.estacion} — a <strong>${n.min} min</strong></div>
+              <div class="notif-log-time">${n.hora}</div>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>` : "";
+
+  z.innerHTML = `
+    ${permBanner}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:800">Mis alertas <span style="font-size:13px;color:var(--muted);font-weight:500">(${suscripciones.filter(s=>s.activa).length} activas)</span></div>
+      <div style="font-size:12px;color:${pollingTimer?'#22c55e':'#94a3b8'};font-family:'DM Mono',monospace;font-weight:700">${pollingTimer?'● CHEQUEANDO':'○ EN PAUSA'}</div>
+    </div>
+    ${susHtml}
+    <div class="add-alerta-card" onclick="openSusModal()">
+      <div class="add-icon">＋</div>
+      <div class="add-label">Agregar nueva alerta</div>
+    </div>
+    ${logHtml}`;
+}
+
+// ══ NOTIFICACIONES: LÓGICA ════════════════════════════════════════════════════
+async function requestNotifPermission() {
+  const perm = await Notification.requestPermission();
+  if (perm === "granted") renderTab();
+  else alert("Sin permiso de notificaciones la app no puede avisarte. Habilitalo en la configuración de tu celular.");
+}
+
+function startPolling() {
+  if (pollingTimer) clearInterval(pollingTimer);
+  pollingTimer = setInterval(checkSuscripciones, 60000); // cada 60s
+}
+
+async function checkSuscripciones() {
+  if (apiStatus !== "ok") return;
+  const now = new Date();
+  const horaActual = now.toTimeString().slice(0,5);
+
+  for (const sus of suscripciones) {
+    if (!sus.activa) continue;
+    if (horaActual < sus.desde || horaActual > sus.hasta) continue;
+
+    try {
+      const stopId = `${sus.lineaId}_${sus.estacion}`.replace(/\s/g,"_").toLowerCase();
+      const data = await apiFetch("/trenes/arrivalDeparture", {stop_id: stopId});
+      const arr = data?.entity || data?.arrivals || [];
+      const nowSec = Math.floor(Date.now()/1000);
+      const linea = LINEAS.find(l=>l.id===sus.lineaId)||LINEAS[0];
+
+      for (const e of arr.slice(0,5)) {
+        const tu = e.trip_update||e;
+        const st = tu?.stop_time_update?.[0]||{};
+        const ar = st?.arrival||{};
+        const t = ar?.time;
+        if (!t) continue;
+        const min = Math.round((t - nowSec)/60);
+        const tripId = tu?.trip?.trip_id || `${t}`;
+
+        if (sus.aviso20 && min >= 18 && min <= 22) {
+          const key = `${tripId}-20`;
+          if (!notifSent.has(key)) {
+            notifSent.add(key);
+            dispararNotificacion(linea, sus.estacion, min, key);
+          }
+        }
+        if (sus.aviso10 && min >= 8 && min <= 12) {
+          const key = `${tripId}-10`;
+          if (!notifSent.has(key)) {
+            notifSent.add(key);
+            dispararNotificacion(linea, sus.estacion, min, key);
+          }
+        }
+      }
+    } catch(e) {
+      console.warn("Error chequeando suscripción:", e.message);
+    }
+  }
+}
+
+function dispararNotificacion(linea, estacion, min, key) {
+  const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+  // Guardar en log
+  notifLog.unshift({lineaNombre:linea.nombre, estacion, min, hora, key});
+  if (notifLog.length > 50) notifLog.pop();
+  localStorage.setItem("notifLog", JSON.stringify(notifLog));
+  updateNotifBadge();
+
+  // Notificación del sistema
+  if (Notification.permission === "granted") {
+    new Notification(`🚆 Tren ${linea.nombre} llegando`, {
+      body: `A ${min} minutos de ${estacion} · ${hora}`,
+      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚆</text></svg>",
+      tag: key,
+      requireInteraction: min <= 10,
+    });
+  }
+
+  // Vibración si está disponible
+  if (navigator.vibrate) navigator.vibrate(min <= 10 ? [200,100,200] : [100]);
+}
+
+function updateNotifBadge() {
+  const badge = document.getElementById("notifBadge");
+  const hoy = new Date().toDateString();
+  const hoy_count = notifLog.filter(n => new Date(n.hora).toDateString?.() === hoy || true).length;
+  if (notifLog.length > 0) {
+    badge.style.display = "flex";
+    badge.textContent = Math.min(notifLog.length, 9);
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+// ══ SUSCRIPCIONES: CRUD ═══════════════════════════════════════════════════════
+function openSusModal() {
+  susLineaSeleccionada = LINEAS[2]; // Roca
+  renderSusLineaGrid();
+  updateSusEstaciones();
+  document.getElementById("susDesde").value = "07:00";
+  document.getElementById("susHasta").value = "10:00";
+  document.getElementById("chk20").checked = true;
+  document.getElementById("chk10").checked = true;
+  document.getElementById("susModal").style.display = "flex";
+}
+
+function renderSusLineaGrid() {
+  document.getElementById("susLineaGrid").innerHTML = LINEAS.map(l=>`
+    <div class="linea-option${l.id===susLineaSeleccionada.id?' selected':''}"
+      style="color:${l.color};border-color:${l.id===susLineaSeleccionada.id?l.color:'var(--border)'};background:${l.id===susLineaSeleccionada.id?l.color+'15':'#fff'}"
+      onclick="selectSusLinea('${l.id}')">
+      <div style="font-weight:800">${l.nombre}</div>
+    </div>`).join("");
+}
+
+function selectSusLinea(id) {
+  susLineaSeleccionada = LINEAS.find(l=>l.id===id);
+  renderSusLineaGrid();
+  updateSusEstaciones();
+}
+
+function updateSusEstaciones() {
+  const sel = document.getElementById("susEstacion");
+  sel.innerHTML = (ESTACIONES[susLineaSeleccionada.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
+}
+
+function saveSuscripcion() {
+  const nueva = {
+    id: Date.now(),
+    lineaId: susLineaSeleccionada.id,
+    estacion: document.getElementById("susEstacion").value,
+    desde: document.getElementById("susDesde").value,
+    hasta: document.getElementById("susHasta").value,
+    aviso20: document.getElementById("chk20").checked,
+    aviso10: document.getElementById("chk10").checked,
+    activa: true,
+  };
+  suscripciones.push(nueva);
+  localStorage.setItem("suscripciones", JSON.stringify(suscripciones));
+  closeModal("susModal");
+  requestNotifPermission();
+  renderTab();
+}
+
+function deleteSus(i) {
+  suscripciones.splice(i,1);
+  localStorage.setItem("suscripciones", JSON.stringify(suscripciones));
+  renderTab();
+}
+
+function toggleSus(i, val) {
+  suscripciones[i].activa = val;
+  localStorage.setItem("suscripciones", JSON.stringify(suscripciones));
+  renderTab();
+}
+
+function clearLog() {
+  notifLog = [];
+  localStorage.setItem("notifLog", JSON.stringify(notifLog));
+  updateNotifBadge();
+  renderTab();
+}
+
+// ══ MODALES ═══════════════════════════════════════════════════════════════════
+function openConfigModal() {
+  document.getElementById("cfgProxyUrl").value = proxyUrl;
+  document.getElementById("cfgClientId").value = creds.client_id;
+  document.getElementById("cfgClientSecret").value = creds.client_secret;
+  document.getElementById("configModal").style.display = "flex";
+}
+function saveConfig() {
+  proxyUrl = document.getElementById("cfgProxyUrl").value.trim();
+  creds.client_id = document.getElementById("cfgClientId").value.trim();
+  creds.client_secret = document.getElementById("cfgClientSecret").value.trim();
+  localStorage.setItem("proxyUrl", proxyUrl);
+  localStorage.setItem("clientId", creds.client_id);
+  localStorage.setItem("clientSecret", creds.client_secret);
+  closeModal("configModal");
+  updateStatusUI("checking");
+  document.getElementById("bannerZone").innerHTML=`<div class="banner banner-warn"><strong>🔄 Verificando conexión…</strong></div>`;
+  testConexion();
+}
+function closeModal(id){document.getElementById(id).style.display="none"}
+function closeModalIf(e,id){if(e.target.id===id)closeModal(id)}
+</script>
+</body>
+</html>
