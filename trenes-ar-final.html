@@ -368,6 +368,15 @@ let pollingTimer=null;
 let filtroAlertas="todas";
 
 // ══ INIT ══════════════════════════════════════════════════════════════════════
+// ── Service Worker — requerido para notificaciones en Android ─────────────────
+let swReady = null;
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    console.log("SW registrado ✅");
+    swReady = navigator.serviceWorker.ready;
+  }).catch(e => console.warn("SW error:", e.message));
+}
+
 window.addEventListener("DOMContentLoaded",()=>{
   renderLineas();
   updateEstaciones();
@@ -694,7 +703,7 @@ function renderNotif(z){
   const susHtml=suscripciones.length===0?`<div style="text-align:center;padding:32px 0;color:var(--muted)"><div style="font-size:48px;margin-bottom:12px">🔕</div><div style="font-size:15px;font-weight:700;margin-bottom:6px">Sin alertas configuradas</div><div style="font-size:13px">Tocá el botón de abajo para crear tu primera alerta</div></div>`:
     suscripciones.map((s,i)=>{const linea=LINEAS.find(l=>l.id===s.lineaId)||LINEAS[0];return`<div class="suscripcion-card"><div class="sus-header"><div class="sus-linea"><div class="sus-linea-dot" style="background:${linea.color}"></div><div><div class="sus-nombre">${linea.nombre} · ${s.estacion}</div><div class="sus-estacion">Franja ${s.desde} – ${s.hasta}</div></div></div><button class="sus-delete" onclick="deleteSus(${i})">✕</button></div><div class="sus-pills">${s.aviso20?`<span class="sus-pill" style="background:#dbeafe;color:#1d4ed8">⏰ 20 min</span>`:''} ${s.aviso10?`<span class="sus-pill" style="background:#dcfce7;color:#166534">⏰ 10 min</span>`:''}</div><div class="sus-toggle"><span class="toggle-label">${s.activa?'Activa':'Pausada'}</span><label class="toggle-switch"><input type="checkbox" ${s.activa?'checked':''} onchange="toggleSus(${i},this.checked)"><span class="toggle-slider"></span></label></div></div>`;}).join("");
   const logHtml=notifLog.length>0?`<div class="section-card"><div class="section-header"><span class="section-title">Historial</span><button onclick="clearLog()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer">Limpiar</button></div>${notifLog.slice(0,10).map(n=>`<div class="notif-log-item"><span class="notif-log-icon">${n.min<=10?'🚨':'⚠️'}</span><div><div class="notif-log-text"><strong>${n.lineaNombre}</strong> en ${n.estacion} — a <strong>${n.min} min</strong></div><div class="notif-log-time">${n.hora}</div></div></div>`).join("")}</div>`:"";
-  z.innerHTML=`${permBanner}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:16px;font-weight:800">Mis alertas <span style="font-size:13px;color:var(--muted);font-weight:500">(${suscripciones.filter(s=>s.activa).length} activas)</span></div></div>${susHtml}<div class="add-alerta-card" onclick="openSusModal()"><div class="add-icon">＋</div><div class="add-label">Agregar nueva alerta</div></div>${logHtml}`;
+  z.innerHTML=`${permBanner}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:16px;font-weight:800">Mis alertas <span style="font-size:13px;color:var(--muted);font-weight:500">(${suscripciones.filter(s=>s.activa).length} activas)</span></div></div>${susHtml}<div class="add-alerta-card" onclick="openSusModal()"><div class="add-icon">＋</div><div class="add-label">Agregar nueva alerta</div></div>${logHtml}<div class="section-card" style="margin-bottom:14px"><div class="section-header" style="margin-bottom:10px"><span class="section-title">🧪 Testear notificaciones</span></div><div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5">Enviá una notificación de prueba para verificar que aparece en la barra del sistema.</div><div style="display:flex;gap:8px"><button onclick="testNotificacion(20)" style="flex:1;padding:12px;border-radius:10px;border:1.5px solid #3b82f6;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Simular 20 min ⏰</button><button onclick="testNotificacion(10)" style="flex:1;padding:12px;border-radius:10px;border:none;background:#0f172a;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Simular 10 min 🚨</button></div></div>`;
 }
 
 async function requestNotifPermission(){
