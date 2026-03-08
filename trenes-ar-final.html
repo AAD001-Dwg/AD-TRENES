@@ -282,13 +282,56 @@ const LINEAS=[
   {id:"belgrano-sur",  nombre:"Bel. Sur",     color:"#8B5CF6"},
 ];
 const ESTACIONES={
-  mitre:           ["Retiro","Palermo","Belgrano C","Núñez","Rivadavia","San Isidro","Tigre"],
-  sarmiento:       ["Once","Caballito","Flores","Liniers","Morón","Ituzaingó","Moreno"],
-  roca:            ["Constitución","Avellaneda","Lanús","Lomas de Zamora","Banfield","Temperley","Hudson","La Plata"],
-  "san-martin":    ["Retiro","Palermo","Villa del Parque","El Palomar","Merlo"],
-  "belgrano-norte":["F.C. Central","Villa del Parque","Palermo","Colegiales","Villa Urquiza"],
-  "belgrano-sur":  ["Buenos Aires","Pompeya","Villa Soldati","González Catán"],
+  mitre: [
+    "Retiro","Palermo","Belgrano C","Núñez","Aristóbulo del Valle","Rivadavia",
+    "Lisandro de la Torre","Martínez","Acassuso","San Isidro","Boulogne",
+    "Benavídez","Tigre",
+    // Ramal José León Suárez
+    "Miguelete","Rodríguez Peña","José León Suárez",
+    // Ramal Bartolomé Mitre
+    "Bartolomé Mitre","Florida","Villa del Parque"
+  ],
+  sarmiento: [
+    "Once","Caballito","Flores","Liniers","Ramos Mejía","Haedo",
+    "El Palomar","Morón","Castelar","Ituzaingó","Merlo","Paso del Rey",
+    "Padua","Moreno","Libertad","Mercedes","Luján",
+    // Ramal Lobos
+    "González Catán","Lomas del Mirador","La Tablada"
+  ],
+  roca: [
+    // Ramal La Plata (del debug real)
+    "Constitución","S y Kosteki","Sarandí","V. Domínico","Wilde",
+    "Don Bosco","Bernal","Quilmes","Ezpeleta","Berazategui",
+    "Plátanos","Hudson","Pereyra","V. Elisa","City Bell",
+    "Gonnet","Ringuelet","Tolosa","La Plata",
+    // Ramal Bosques / Temperley
+    "Avellaneda","Lanús","Lomas de Zamora","Banfield","Temperley",
+    "Longchamps","Alejandro Korn","Bosques","Florencio Varela",
+    // Ramal Glew / Ezeiza
+    "Glew","Ezeiza",
+    // Ramal Cañuelas
+    "Cañuelas"
+  ],
+  "san-martin": [
+    "Retiro","Palermo","Villa del Parque","Villa Devoto","El Palomar",
+    "Palermo","Chacarita","Paternal","Villa del Parque",
+    "Villa Devoto","Villa del Parque","Ciudadela",
+    "Liniers","Haedo","El Palomar","Palermo","Merlo",
+    "General Rodríguez","Luján"
+  ],
+  "belgrano-norte": [
+    "F.C. Central","Paternal","Villa del Parque","Villa Urquiza",
+    "Colegiales","Palermo","Villa del Parque",
+    "Aristóbulo del Valle","Drago","Villa Bosch","Del Viso","Grand Bourg",
+    "Maquinista Savio","Miguelete","José León Suárez","Zárate"
+  ],
+  "belgrano-sur": [
+    "Buenos Aires","Pompeya","Villa Soldati","Lugano",
+    "González Catán","Marinos del Crucero Gral. Belgrano"
+  ],
 };
+// Cache dinámico: se reemplaza al cargar desde la API
+let estacionesCache = {...ESTACIONES};
 const MOCK_ALERTAS=[
   {tipo:"demora",linea:"Sarmiento",titulo:"Demoras en Sarmiento",desc:"Hasta 20 min por desperfecto técnico entre Flores y Liniers.",tiempo:"Hace 10 min",activa:true},
   {tipo:"corte", linea:"Roca",     titulo:"Servicio suspendido", desc:"Suspensión parcial entre Constitución y Avellaneda.",tiempo:"Hace 35 min",activa:true},
@@ -334,7 +377,7 @@ window.addEventListener("DOMContentLoaded",()=>{
   updateStatusUI();
   updateNotifBadge();
   updateFavStar();
-  if(proxyUrl||creds.client_id) testConexion();
+  if(proxyUrl||creds.client_id) testConexion().then(()=>cargarEstacionesDinamicas());
   startPolling();
 });
 
@@ -381,13 +424,13 @@ function renderLineas(){
 }
 function selectLinea(id){
   lineaActiva=LINEAS.find(l=>l.id===id);
-  estacionActiva=ESTACIONES[id][0];
+  estacionActiva=estacionesCache[id][0];
   renderLineas();updateEstaciones();updateFavStar();
   if(tabActivo==="proximos") renderTab();
 }
 function updateEstaciones(){
   const sel=document.getElementById("estacionSelect");
-  sel.innerHTML=(ESTACIONES[lineaActiva.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
+  sel.innerHTML=(estacionesCache[lineaActiva.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
   sel.value=estacionActiva;
   document.getElementById("lineaDot").style.background=lineaActiva.color;
 }
@@ -468,7 +511,7 @@ function genTrenes(linea,estacion){
   return Array.from({length:3},(_,i)=>{
     const min=Math.floor(Math.random()*4)+i*7+1;
     const dem=Math.random()>.7?Math.floor(Math.random()*12)+1:0;
-    const dest=(ESTACIONES[linea.id]||[]).at(-1)||"Terminal";
+    const dest=(estacionesCache[linea.id]||[]).at(-1)||"Terminal";
     return{id:`T${Math.floor(Math.random()*9000)+1000}`,dest,min:min+dem,dem,
       hora:new Date(now.getTime()+(min+dem)*60000).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}),
       cap:["Alta","Media","Baja"][Math.floor(Math.random()*3)],anden:(i%4)+1};
@@ -484,7 +527,7 @@ async function fetchTrenes(linea,estacion){
     const arr=data?.llegadas||[];
     const trenes=arr.slice(0,3).map((e,i)=>({
       id:e.tripId||`T${1000+i}`,
-      dest:e.dest||(ESTACIONES[linea.id]||[]).at(-1)||"Terminal",
+      dest:e.dest||(estacionesCache[linea.id]||[]).at(-1)||"Terminal",
       min:Math.max(1,e.minutos||1),
       dem:e.demora||0,
       hora:e.hora||"--:--",
@@ -527,7 +570,7 @@ function trenCardHTML(t,i,linea,estacion,mini=false){
       <div class="tren-card-row">
         <div>
           <div class="tren-dest">→ ${t.dest}</div>
-          <div class="tren-sub">#${t.id} · Andén ${t.anden}</div>
+          <div class="tren-sub">Servicio ${t.ramal||lineaActiva.nombre} · Andén ${t.anden}</div>
           <div style="margin-top:6px">${capBadge(t.cap)}</div>
         </div>
         <div>
@@ -540,8 +583,8 @@ function trenCardHTML(t,i,linea,estacion,mini=false){
     </div>`;
 }
 
-async function renderProximos(z){
-  z.innerHTML=`<div class="spinner-wrap"><div class="spinner-icon">⟳</div><div class="spinner-text">Buscando trenes…</div></div>`;
+async function renderProximos(z, silent=false){
+  if(!silent) z.innerHTML=`<div class="spinner-wrap"><div class="spinner-icon">⟳</div><div class="spinner-text">Buscando trenes…</div></div>`;
   const {trenes,mock}=await fetchTrenes(lineaActiva,estacionActiva);
   z.innerHTML=`
     <div class="section-card">
@@ -573,12 +616,12 @@ async function renderMulti(z){
 
   // Inicializar estaciones guardadas
   lineasMostrar.forEach(l=>{
-    if(!multiEstaciones[l.id]) multiEstaciones[l.id]=ESTACIONES[l.id][0];
+    if(!multiEstaciones[l.id]) multiEstaciones[l.id]=estacionesCache[l.id][0];
   });
 
   // Cargar trenes para cada línea en paralelo
   const resultados=await Promise.all(lineasMostrar.map(async l=>{
-    const est=multiEstaciones[l.id]||ESTACIONES[l.id][0];
+    const est=multiEstaciones[l.id]||estacionesCache[l.id][0];
     const {trenes,mock}=await fetchTrenes(l,est);
     return{linea:l,est,trenes,mock};
   }));
@@ -593,7 +636,7 @@ async function renderMulti(z){
         <div class="multi-linea-header">
           <span class="multi-linea-pill" style="background:${linea.color}">${linea.nombre}</span>
           <select class="multi-estacion-select" onchange="onMultiEstChange('${linea.id}',this.value)">
-            ${(ESTACIONES[linea.id]||[]).map(e=>`<option value="${e}"${e===est?' selected':''}>${e}</option>`).join("")}
+            ${(estacionesCache[linea.id]||[]).map(e=>`<option value="${e}"${e===est?' selected':''}>${e}</option>`).join("")}
           </select>
           <span style="font-size:10px;font-family:'DM Mono',monospace;color:${mock?'#f59e0b':'#22c55e'}">${mock?'DEMO':'LIVE'}</span>
         </div>
@@ -641,7 +684,7 @@ function setFiltroAlertas(f){filtroAlertas=f;renderAlertas(document.getElementBy
 // ══ HORARIOS ══════════════════════════════════════════════════════════════════
 function renderHorarios(z){
   const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
-  z.innerHTML=`<div class="section-card"><div class="section-header"><span class="section-title">Salidas desde ${ESTACIONES[lineaActiva.id][0]}</span></div><div><div style="display:grid;grid-template-columns:70px 1fr 90px 70px;padding:8px 2px;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border)"><span>HORA</span><span>DESTINO</span><span>DÍAS</span><span>TIPO</span></div>${MOCK_HORARIOS.map(h=>{const p=h.hora<hora;return`<div class="horario-row" style="opacity:${p?.4:1}"><span class="horario-hora" style="color:${p?'#94a3b8':lineaActiva.color}">${h.hora}</span><span style="font-size:13px;font-weight:500">→ ${h.dest}</span><span style="font-size:11px;color:var(--muted)">${h.dias}</span><span class="badge" style="background:${h.tipo==='Directo'?'#dbeafe':'#f3f4f6'};color:${h.tipo==='Directo'?'#1d4ed8':'#374151'}">${h.tipo}</span></div>`;}).join("")}</div></div>`;
+  z.innerHTML=`<div class="section-card"><div class="section-header"><span class="section-title">Salidas desde ${estacionesCache[lineaActiva.id][0]}</span></div><div><div style="display:grid;grid-template-columns:70px 1fr 90px 70px;padding:8px 2px;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border)"><span>HORA</span><span>DESTINO</span><span>DÍAS</span><span>TIPO</span></div>${MOCK_HORARIOS.map(h=>{const p=h.hora<hora;return`<div class="horario-row" style="opacity:${p?.4:1}"><span class="horario-hora" style="color:${p?'#94a3b8':lineaActiva.color}">${h.hora}</span><span style="font-size:13px;font-weight:500">→ ${h.dest}</span><span style="font-size:11px;color:var(--muted)">${h.dias}</span><span class="badge" style="background:${h.tipo==='Directo'?'#dbeafe':'#f3f4f6'};color:${h.tipo==='Directo'?'#1d4ed8':'#374151'}">${h.tipo}</span></div>`;}).join("")}</div></div>`;
 }
 
 // ══ NOTIFICACIONES ════════════════════════════════════════════════════════════
@@ -659,6 +702,51 @@ async function requestNotifPermission(){
   if(p==="granted") renderTab();
   else alert("Sin permiso de notificaciones la app no puede avisarte. Habilitalo en la configuración de tu celular.");
 }
+// Carga estaciones reales desde la API SOFSE para cada línea
+const RAMAL_IDS = {
+  // Mapa lineaId → ramales SOFSE conocidos
+  // (id_ramal obtenidos de la API)
+  roca: [11, 16, 26, 27, 28, 30, 31],  // Constitución-LP, Bosques, Temperley, etc
+  mitre: [1, 2, 3, 4, 5],
+  sarmiento: [6, 7, 8],
+  "san-martin": [9, 10],
+  "belgrano-norte": [17, 18],
+  "belgrano-sur": [19, 20],
+};
+
+async function cargarEstacionesDinamicas() {
+  // Para cada linea, buscar estaciones por nombre de terminales conocidas
+  const busquedas = {
+    roca: ["Constitución", "La Plata", "Bosques", "Temperley", "Hudson", "Quilmes"],
+    mitre: ["Retiro", "Tigre", "José León Suárez", "Bartolomé Mitre"],
+    sarmiento: ["Once", "Moreno", "Mercedes", "Luján"],
+    "san-martin": ["Retiro", "Merlo", "General Rodríguez"],
+    "belgrano-norte": ["F.C. Central", "José León Suárez", "Del Viso"],
+    "belgrano-sur": ["Buenos Aires", "González Catán"],
+  };
+  try {
+    for (const [lineaId, terminos] of Object.entries(busquedas)) {
+      const encontradas = new Set();
+      for (const termino of terminos.slice(0,2)) { // solo 2 búsquedas por línea
+        try {
+          const data = await apiFetch("/trenes/estaciones", {nombre: termino});
+          const lista = Array.isArray(data) ? data : (data?.estaciones || []);
+          lista.forEach(e => { if(e.nombre) encontradas.add(e.nombre); });
+        } catch {}
+      }
+      if (encontradas.size > 3) {
+        const sorted = [...encontradas].sort();
+        estacionesCache[lineaId] = sorted;
+        // Actualizar el selector si es la línea activa
+        if (lineaId === lineaActiva.id) updateEstaciones();
+      }
+    }
+    console.log('Estaciones dinámicas cargadas');
+  } catch(e) {
+    console.warn('No se pudieron cargar estaciones dinámicas:', e.message);
+  }
+}
+
 function startPolling(){if(pollingTimer) clearInterval(pollingTimer);pollingTimer=setInterval(checkSuscripciones,60000);}
 async function checkSuscripciones(){
   if(apiStatus!=="ok") return;
@@ -685,7 +773,16 @@ function dispararNotificacion(linea,estacion,min,key){
   if(notifLog.length>50) notifLog.pop();
   localStorage.setItem("notifLog",JSON.stringify(notifLog));
   updateNotifBadge();
-  if(Notification.permission==="granted") new Notification(`🚆 Tren ${linea.nombre} llegando`,{body:`A ${min} minutos de ${estacion} · ${hora}`,tag:key,requireInteraction:min<=10});
+  if(Notification.permission==="granted"){
+    const opts={body:`A ${min} minutos de ${estacion} · ${hora}`,
+      tag:key, requireInteraction:min<=10,
+      icon:'/icon.png', badge:'/icon.png',
+      vibrate:min<=10?[200,100,200]:[100],
+      data:{estacion,min,linea:linea.nombre}};
+    // Con SW funciona en Android aunque la app esté en segundo plano
+    if(swRegistration) swRegistration.showNotification(`🚆 Tren ${linea.nombre} llegando`,opts);
+    else new Notification(`🚆 Tren ${linea.nombre} llegando`,opts);
+  }
   if(navigator.vibrate) navigator.vibrate(min<=10?[200,100,200]:[100]);
 }
 function updateNotifBadge(){
@@ -709,7 +806,7 @@ function renderSusLineaGrid(){
 }
 function selectSusLinea(id){susLineaSeleccionada=LINEAS.find(l=>l.id===id);renderSusLineaGrid();updateSusEstaciones();}
 function updateSusEstaciones(){
-  document.getElementById("susEstacion").innerHTML=(ESTACIONES[susLineaSeleccionada.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
+  document.getElementById("susEstacion").innerHTML=(estacionesCache[susLineaSeleccionada.id]||[]).map(e=>`<option value="${e}">${e}</option>`).join("");
 }
 function saveSuscripcion(){
   suscripciones.push({id:Date.now(),lineaId:susLineaSeleccionada.id,estacion:document.getElementById("susEstacion").value,desde:document.getElementById("susDesde").value,hasta:document.getElementById("susHasta").value,aviso20:document.getElementById("chk20").checked,aviso10:document.getElementById("chk10").checked,activa:true});

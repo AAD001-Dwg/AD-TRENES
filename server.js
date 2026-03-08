@@ -15,6 +15,29 @@ app.use(express.json());
 // ── Servir la app HTML ────────────────────────────────────────────────────────
 app.get("/", (_req, res) => res.sendFile(join(__dirname, "trenes-ar-final.html")));
 
+// ── Service Worker — necesario para notificaciones en Android ─────────────────
+app.get("/sw.js", (_req, res) => {
+  res.setHeader("Content-Type", "application/javascript");
+  res.setHeader("Service-Worker-Allowed", "/");
+  res.send(`
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", e => e.waitUntil(clients.claim()));
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({type:"window"}).then(cs => {
+    if (cs.length) return cs[0].focus();
+    return clients.openWindow("/");
+  }));
+});
+  `);
+});
+
+// ── Ícono SVG simple ──────────────────────────────────────────────────────────
+app.get("/icon.png", (_req, res) => {
+  res.setHeader("Content-Type", "image/svg+xml");
+  res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🚆</text></svg>');
+});
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 async function sofseFetch(path) {
   const res = await fetch(`${SOFSE_API}${path}`, {
