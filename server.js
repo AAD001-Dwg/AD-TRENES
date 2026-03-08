@@ -216,4 +216,3 @@ app.listen(PORT, async () => {
   console.log(`   Credenciales: ${CLIENT_ID ? "✅" : "❌"}\n`);
   await cargarStops();
 });
- 
